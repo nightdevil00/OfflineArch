@@ -4,7 +4,7 @@ A two-script toolkit for building a self-contained Arch Linux live ISO that can 
 
 **`build_iso.sh`** – Builds a custom `archiso` image containing an offline package repository (all dependencies pre-cached). The ISO boots directly into the installer with no internet required.
 
-**`install_arch.sh`** – Interactive installer that runs from the ISO (or standalone). It detects free disk space (no full-disk wipe), optionally encrypts with LUKS2, creates a Btrfs layout with subvolumes (`@`, `@home`, `@snapshots`, `@log`), installs the base system from the offline repo, configures Limine as the UEFI bootloader (with automatic Windows chainload detection), and enables Plymouth, ZRAM, PipeWire, and NetworkManager.
+**`install_arch.sh`** – Interactive installer that runs from the ISO . It detects free disk space (no full-disk wipe), optionally encrypts with LUKS2, creates a Btrfs layout with subvolumes (`@`, `@home`, `@snapshots`, `@log`), installs the base system from the offline repo, configures Limine as the UEFI bootloader (with automatic Windows chainload detection), and enables Plymouth, ZRAM, PipeWire, and NetworkManager. It's a minimal install that's done in minutes.
 
 ### Features
 
@@ -63,10 +63,13 @@ Replace `/dev/sdX` with your USB device (e.g. `/dev/sda`).
    - Confirm to begin installation
 
 4. After completion, reboot and select "Arch Linux (Limine)" from the UEFI boot menu.
+5. Use nmtui to connect to Internet and pacman-key --init and pacman-key --populate archlinux before updating your system.
+6. Enjoy
 
 ## Customization
 
-Edit the `TARGET_PACKAGES` array in `build_iso.sh` to add or remove packages from the offline repository and installation target.
+Edit the `TARGET_PACKAGES` array in `build_iso.sh` to add or remove packages from the offline repository and installation target and in `install_arch.sh` to strap them into the installed system.
+
 
 ## How it works
 
