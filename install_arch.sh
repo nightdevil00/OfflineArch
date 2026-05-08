@@ -23,7 +23,22 @@ info "Installation log: $LOGFILE"
 to_gb() { awk -v b="$1" 'BEGIN{printf "%.1fGB",b/1073741824}'; }
 
 # ==============================
-# STEP 1: SELECT DISK
+# STEP 1: SELECT MODE
+# ==============================
+echo "=== Select installation mode ==="
+echo "  1) DualBoot  — Install alongside an existing OS"
+echo "  2) Full Wipe — Erase entire disk and install fresh"
+echo
+read -r -p "Select mode [1/2]: " MODE
+case "$MODE" in
+  1|D|d|dualboot|DualBoot) MODE="dualboot" ;;
+  2|F|f|full|Full|fullwipe|FullWipe) MODE="fullwipe" ;;
+  *) abort "Invalid mode selection." ;;
+esac
+info "Mode: $([[ "$MODE" == "dualboot" ]] && echo "DualBoot" || echo "Full Wipe")"
+
+# ==============================
+# STEP 2: SELECT DISK
 # ==============================
 echo "=== Available disks ==="
 boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)
@@ -61,51 +76,54 @@ DISK="${disks[$sel]}"
 info "Selected: $DISK"
 
 # ==============================
-# STEP 2: DETECT WINDOWS
+# STEP 3: DETECT WINDOWS + FREE SPACE (DualBoot only)
 # ==============================
 WIN_EFI=""
-for p in $(blkid -t TYPE=vfat -o device 2>/dev/null); do
-  mp=$(mktemp -d)
-  if mount -o ro "$p" "$mp" 2>/dev/null; then
-    if [[ -d "$mp/EFI/Microsoft" ]]; then
-      WIN_EFI="$p"
-      umount "$mp" 2>/dev/null; rmdir "$mp" 2>/dev/null
-      break
+FREE_START_B=""
+FREE_END_B=""
+FREE_SIZE_B=""
+
+if [[ "$MODE" == "dualboot" ]]; then
+  # Detect Windows EFI
+  for p in $(blkid -t TYPE=vfat -o device 2>/dev/null); do
+    mp=$(mktemp -d)
+    if mount -o ro "$p" "$mp" 2>/dev/null; then
+      if [[ -d "$mp/EFI/Microsoft" ]]; then
+        WIN_EFI="$p"
+        umount "$mp" 2>/dev/null; rmdir "$mp" 2>/dev/null
+        break
+      fi
+      umount "$mp" 2>/dev/null
     fi
-    umount "$mp" 2>/dev/null
+    rmdir "$mp" 2>/dev/null
+  done
+
+  if [[ -n "$WIN_EFI" ]]; then
+    echo; ok "Windows EFI detected on $WIN_EFI"
+  else
+    echo; warn "No Windows EFI partition found."
+    ask "Continue anyway (may overwrite existing data)?" || abort "Cancelled."
   fi
-  rmdir "$mp" 2>/dev/null
-done
 
-if [[ -n "$WIN_EFI" ]]; then
+  # Detect free space
   echo
-  ok "Windows EFI detected on $WIN_EFI"
-else
-  echo
-  warn "No Windows EFI partition found."
-  ask "Continue anyway (may overwrite existing data)?" || abort "Cancelled."
+  partprobe "$DISK" 2>/dev/null || true
+  sleep 1
+
+  FREE_INFO=$(parted -m "$DISK" unit B print free 2>/dev/null | \
+    awk -F: '$NF ~ /free/ {gsub(/B/,"",$2);gsub(/B/,"",$3);gsub(/B/,"",$4); if($4+0>m+0){m=$4;s=$2;e=$3}} END{if(m>0) printf "%s %s %s",s,e,m}')
+  FREE_START_B=$(echo "$FREE_INFO" | awk '{print $1}')
+  FREE_END_B=$(echo "$FREE_INFO" | awk '{print $2}')
+  FREE_SIZE_B=$(echo "$FREE_INFO" | awk '{print $3}')
+
+  if [[ -z "$FREE_INFO" || "$FREE_SIZE_B" -lt $((10*1073741824)) ]]; then
+    abort "No usable free space (>=10GB) detected on $DISK. Shrink a partition first."
+  fi
+
+  FREE_START_GB=$(to_gb "$FREE_START_B")
+  FREE_SIZE_GB=$(to_gb "$FREE_SIZE_B")
+  info "Free space: $FREE_SIZE_GB (from $FREE_START_GB)"
 fi
-
-# ==============================
-# STEP 3: DETECT FREE SPACE
-# ==============================
-echo
-partprobe "$DISK" 2>/dev/null || true
-sleep 1
-
-FREE_INFO=$(parted -m "$DISK" unit B print free 2>/dev/null | \
-  awk -F: '$NF ~ /free/ {gsub(/B/,"",$2);gsub(/B/,"",$3);gsub(/B/,"",$4); if($4+0>m+0){m=$4;s=$2;e=$3}} END{if(m>0) printf "%s %s %s",s,e,m}')
-FREE_START_B=$(echo "$FREE_INFO" | awk '{print $1}')
-FREE_END_B=$(echo "$FREE_INFO" | awk '{print $2}')
-FREE_SIZE_B=$(echo "$FREE_INFO" | awk '{print $3}')
-
-if [[ -z "$FREE_INFO" || "$FREE_SIZE_B" -lt $((10*1073741824)) ]]; then
-  abort "No usable free space (>=10GB) detected on $DISK. Shrink a partition first."
-fi
-
-FREE_START_GB=$(to_gb "$FREE_START_B")
-FREE_SIZE_GB=$(to_gb "$FREE_SIZE_B")
-info "Free space: $FREE_SIZE_GB (from $FREE_START_GB)"
 
 # ==============================
 # STEP 4: USER INPUT
@@ -140,9 +158,12 @@ fi
 # ==============================
 echo
 echo "=== Installation Summary ==="
+echo "  Mode:      $([[ "$MODE" == "dualboot" ]] && echo "DualBoot" || echo "Full Wipe")"
 echo "  Disk:      $DISK"
-echo "  Free:      $FREE_SIZE_GB at $FREE_START_GB"
-echo "  Windows:   ${WIN_EFI:+Yes ($WIN_EFI)}${WIN_EFI:-Not detected}"
+if [[ "$MODE" == "dualboot" ]]; then
+  echo "  Free:      $FREE_SIZE_GB at $FREE_START_GB"
+  echo "  Windows:   ${WIN_EFI:+Yes ($WIN_EFI)}${WIN_EFI:-Not detected}"
+fi
 echo "  Encrypt:   $ENCRYPT"
 echo "  Hostname:  $HOSTNAME"
 echo "  Username:  $USERNAME"
@@ -150,7 +171,18 @@ echo "  Boot:      Limine (UEFI)"
 echo
 echo "Partitions to create:"
 echo "  1) 2GB EFI (fat32, esp)"
-echo "  2) ${FREE_SIZE_GB} Btrfs root${ENCRYPT:+ (LUKS encrypted)}"
+if [[ "$MODE" == "fullwipe" ]]; then
+  DISK_SIZE_B=$(lsblk -b -dno SIZE "$DISK")
+  ROOT_EST_SIZE=$(( DISK_SIZE_B - 2147483648 ))
+  echo "  2) $(to_gb "$ROOT_EST_SIZE") Btrfs root (rest of disk)${ENCRYPT:+ (LUKS encrypted)}"
+else
+  echo "  2) ${FREE_SIZE_GB} Btrfs root${ENCRYPT:+ (LUKS encrypted)}"
+fi
+
+if [[ "$MODE" == "fullwipe" ]]; then
+  echo
+  warn "This will ERASE ALL DATA on $DISK!"
+fi
 echo
 ask "Proceed with installation?" || abort "Cancelled."
 
@@ -160,24 +192,39 @@ ask "Proceed with installation?" || abort "Cancelled."
 echo
 info "Creating partitions..."
 
-LAST_PART=$(lsblk -n -o PARTN "$DISK" 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1)
-EFI_NUM=$(( ${LAST_PART:-0} + 1 ))
-ROOT_NUM=$(( EFI_NUM + 1 ))
-
 ALIGN=$((1048576))
-EFI_SIZE_B=$((2147483648))
-EFI_START_B=$(( (FREE_START_B + ALIGN - 1) / ALIGN * ALIGN ))
-EFI_END_B=$((EFI_START_B + EFI_SIZE_B))
-ROOT_START_B=$(( (EFI_END_B + 1 + ALIGN - 1) / ALIGN * ALIGN ))
-ROOT_END_B=$((FREE_END_B / ALIGN * ALIGN - ALIGN))
 
-(( ROOT_END_B > ROOT_START_B )) || abort "Not enough aligned space."
+if [[ "$MODE" == "fullwipe" ]]; then
+  # Full wipe: create fresh GPT, EFI (2GB) + root (rest)
+  parted --script "$DISK" mklabel gpt
+  parted --script "$DISK" mkpart primary fat32 1MiB 2GiB
+  parted --script "$DISK" set 1 esp on
+  parted --script "$DISK" name 1 "ARCH_EFI"
+  parted --script "$DISK" mkpart primary btrfs 2GiB 100%
+  parted --script "$DISK" name 2 "ARCH_ROOT"
 
-parted --script "$DISK" mkpart primary fat32 "${EFI_START_B}B" "${EFI_END_B}B"
-parted --script "$DISK" set "$EFI_NUM" esp on
-parted --script "$DISK" name "$EFI_NUM" "ARCH_EFI"
-parted --script "$DISK" mkpart primary btrfs "${ROOT_START_B}B" "${ROOT_END_B}B"
-parted --script "$DISK" name "$ROOT_NUM" "ARCH_ROOT"
+  EFI_NUM=1
+  ROOT_NUM=2
+else
+  # DualBoot: create partitions in free space
+  LAST_PART=$(lsblk -n -o PARTN "$DISK" 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1)
+  EFI_NUM=$(( ${LAST_PART:-0} + 1 ))
+  ROOT_NUM=$(( EFI_NUM + 1 ))
+
+  EFI_SIZE_B=$((2147483648))
+  EFI_START_B=$(( (FREE_START_B + ALIGN - 1) / ALIGN * ALIGN ))
+  EFI_END_B=$((EFI_START_B + EFI_SIZE_B))
+  ROOT_START_B=$(( (EFI_END_B + 1 + ALIGN - 1) / ALIGN * ALIGN ))
+  ROOT_END_B=$((FREE_END_B / ALIGN * ALIGN - ALIGN))
+
+  (( ROOT_END_B > ROOT_START_B )) || abort "Not enough aligned space."
+
+  parted --script "$DISK" mkpart primary fat32 "${EFI_START_B}B" "${EFI_END_B}B"
+  parted --script "$DISK" set "$EFI_NUM" esp on
+  parted --script "$DISK" name "$EFI_NUM" "ARCH_EFI"
+  parted --script "$DISK" mkpart primary btrfs "${ROOT_START_B}B" "${ROOT_END_B}B"
+  parted --script "$DISK" name "$ROOT_NUM" "ARCH_ROOT"
+fi
 
 partprobe "$DISK"; sync; sleep 3
 
@@ -225,8 +272,8 @@ mount "$EFI_DEV" /mnt/boot
 
 ok "Filesystems created and mounted."
 
-# Copy Windows EFI bootloader for Limine chainload entry
-if [[ -n "$WIN_EFI" ]]; then
+# Copy Windows EFI bootloader for Limine chainload entry (DualBoot only)
+if [[ "$MODE" == "dualboot" && -n "$WIN_EFI" ]]; then
   [[ "$EFI_DEV" == "$WIN_EFI" ]] && abort "EFI device collision with Windows partition."
   WIN_MP=$(mktemp -d)
   if mount -o ro "$WIN_EFI" "$WIN_MP" 2>/dev/null; then
@@ -393,7 +440,7 @@ efibootmgr --create --disk "$DISK" --part "$EFINUM" \
   --label "Arch Linux (Limine)" \
   --loader '\EFI\limine\BOOTX64.EFI' \
   --unicode
-  
+
   efibootmgr -v
 
 # Write limine.conf
