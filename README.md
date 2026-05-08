@@ -1,73 +1,40 @@
-# Arch Linux Offline Installer
+# Arch Offline Installer / DualBoot ISO
 
-A two-script toolkit for building a self-contained Arch Linux live ISO that can perform a fully offline, non-destructive installation with LUKS encryption, Btrfs snapshots, Limine EFI boot, and optional Windows dual-boot detection.
+This project builds a custom Arch Linux ISO that can install Arch fully offline, with or without a DualBoot setup alongside Windows.
 
-**`build_iso.sh`** – Builds a custom `archiso` image containing an offline package repository (all dependencies pre-cached). The ISO boots directly into the installer with no internet required.
+## `build_iso.sh`
 
-**`install_arch.sh`** – Interactive installer that runs from the ISO (or standalone). It detects free disk space (no full-disk wipe), optionally encrypts with LUKS2, creates a Btrfs layout with subvolumes (`@`, `@home`, `@snapshots`, `@log`), installs the base system from the offline repo, configures Limine as the UEFI bootloader (with automatic Windows chainload detection), and enables Plymouth, ZRAM, PipeWire, and NetworkManager.
+Builds the ISO. It:
 
-### Features
+1. Installs `archiso` if missing, then copies the `releng` profile as a base.
+2. Downloads all packages and their dependencies into an **offline repo** (`/var/cache/offline-repo`).
+3. Embeds `install_arch.sh` into the ISO so it runs automatically at boot on `tty1`.
+4. Creates two `pacman.conf` variants:
+   - **online** — for the ISO live environment.
+   - **offline** — points at the bundled repo (`file:///var/cache/offline-repo/`), used by the installer.
+5. Writes ISO metadata (`arch-offline-installer`, label `ARCH_OFFLINE`).
+6. Runs `mkarchiso` and copies the resulting `.iso` to the project directory.
 
-- **Fully offline** – all packages bundled into the ISO; no internet needed during install
-- **Non-destructive** – partitions are created in free space, existing OSes untouched
-- **Dual-boot aware** – detects Windows EFI partitions and copies the bootloader for a chainload entry
-- **Btrfs + snapshots** – CoW filesystem with `@snapshots` subvolume ready for snapper/timeshift
-- **LUKS2 encryption** – optional full-disk encryption with Plymouth splash support
-- **Limine bootloader** – modern, fast EFI bootloader with graphical menu
-- **ZRAM + zstd** – compressed swap-on-RAM for better memory management
-- **PipeWire audio** – full audio stack pre-configured
+## `install_arch.sh`
 
-## Requirements
+Automated installer that runs when booting the ISO. Steps:
 
-- **To build the ISO:** An existing Arch Linux system (or any Arch-based distro) with `archiso` and `pacman-contrib` installed.
-- **To run the installer:** A UEFI system (BIOS/CSM not supported). At least 10 GB of free unpartitioned space on the target disk.
-- **Internet** is only needed during `build_iso.sh` (to download packages). The resulting ISO installs entirely offline.
+1. **Mode selection** — DualBoot (alongside an existing OS) or Full Wipe (erases the disk).
+2. **Disk selection** — Lists available disks, excludes the boot medium.
+3. **Windows detection** — Finds the Windows EFI partition for chainloading.
+4. **Free space detection** (DualBoot) — Finds the largest free region (min 10 GiB).
+5. **User input** — Hostname, username, password.
+6. **Encryption** — Optional LUKS2 root encryption.
+7. **Partitioning** — EFI (2 GiB, FAT32) + Btrfs root in free space or full disk.
+8. **Filesystems** — Btrfs with subvolumes (`@`, `@home`, `@snapshots`, `@log`), mounts EFI at `/boot`, copies Windows bootloader for chainloading.
+9. **Installation** — `pacstrap` from the **offline repo** when available, else online.
+10. **Chroot configuration** — Timezone, locale, hostname, user creation, sudo, mkinitcpio (btrfs + encrypt hooks), **Limine** bootloader, zram-generator, NetworkManager.
+11. **Cleanup** — Offers to reboot.
 
-## Usage
+### Bootloader
 
-### 1. Build the ISO
+Uses **Limine** (UEFI). DualBoot adds a chainload entry for Windows.
 
-```bash
-git clone <this-repo>
-cd arch-offline-installer
-sudo ./build_iso.sh
-```
+### Offline repo
 
-This will:
-- Install `archiso` and `pacman-contrib` if missing
-- Download all packages and their dependencies needed by the installer
-- Create an offline package repository embedded in the ISO
-- Output `arch-offline-installer-<date>.iso` in the current directory
-
-### 2. Write the ISO to a USB drive
-
-```bash
-sudo dd if=arch-offline-installer-<date>.iso of=/dev/sdX bs=4M status=progress
-```
-
-Replace `/dev/sdX` with your USB device (e.g. `/dev/sda`).
-
-### 3. Boot and install
-
-1. Boot from the USB on the target UEFI machine.
-2. The installer launches automatically on tty1. If it doesn't, run manually:
-
-   ```bash
-   sudo /root/install_arch.sh
-   ```
-
-3. Follow the prompts:
-   - Select the target disk
-   - Optionally encrypt with LUKS
-   - Enter hostname, username, and password
-   - Confirm to begin installation
-
-4. After completion, reboot and select "Arch Linux (Limine)" from the UEFI boot menu.
-
-## Customization
-
-Edit the `TARGET_PACKAGES` array in `build_iso.sh` to add or remove packages from the offline repository and installation target.
-
-## How it works
-
-`build_iso.sh` starts from Arch's `releng` profile, layers in the installer script, and pre-downloads every package (with full dependency resolution) into an offline repo stored on the ISO's `airootfs`. At boot, `install_arch.sh` partitions the largest free space region on the selected disk, optionally encrypts the root, creates a Btrfs subvolume layout, and uses `pacstrap -C /etc/pacman-offline.conf` to install everything from the local cache — no mirror required.
+The ISO carries a full package cache so the installation can run without internet.
