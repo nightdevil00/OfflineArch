@@ -38,3 +38,7 @@ Uses **Limine** (UEFI). DualBoot adds a chainload entry for Windows.
 ### Offline repo
 
 The ISO carries a full package cache so the installation can run without internet.
+
+## Installation Flow
+
+![install_arch.sh flow](arch_install_script_flow.svg)

@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1350" font-family="monospace" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+    </marker>
+    <style>
+      .box { fill:#1a1a2e; stroke:#e94560; stroke-width:2; rx:6; }
+      .box2 { fill:#1a1a2e; stroke:#0f3460; stroke-width:2; rx:6; }
+      .diamond { fill:#16213e; stroke:#e94560; stroke-width:2; rx:4; }
+      .text { fill:#eee; font-family:monospace; font-size:13; text-anchor:middle; }
+      .text-sm { fill:#aaa; font-family:monospace; font-size:11; text-anchor:middle; }
+      .line { stroke:#555; stroke-width:2; fill:none; marker-end:url(#arrow); }
+      .line-nc { stroke:#555; stroke-width:2; fill:none; }
+    </style>
+  </defs>
+
+  <!-- Start -->
+  <rect x="300" y="20" width="200" height="36" class="box" rx="20"/>
+  <text x="400" y="43" class="text" font-weight="bold">install_arch.sh</text>
+  <line x1="400" y1="56" x2="400" y2="80" class="line"/>
+
+  <!-- Boot / tty1 trigger -->
+  <rect x="250" y="80" width="300" height="36" class="box2"/>
+  <text x="400" y="103" class="text">Triggered at boot on /dev/tty1</text>
+  <line x1="400" y1="116" x2="400" y2="140" class="line"/>
+
+  <!-- Step 1: Mode -->
+  <rect x="250" y="140" width="300" height="36" class="box"/>
+  <text x="400" y="163" class="text" font-weight="bold">Step 1: Select Mode</text>
+  <line x1="400" y1="176" x2="400" y2="200" class="line"/>
+
+  <!-- Mode diamond -->
+  <polygon points="400,200 480,240 400,280 320,240" class="diamond"/>
+  <text x="400" y="237" class="text-sm">DualBoot</text>
+  <text x="400" y="250" class="text-sm">or Full Wipe?</text>
+
+  <!-- DualBoot branch -->
+  <line x1="480" y1="240" x2="580" y2="240" class="line"/>
+  <rect x="580" y="218" width="200" height="44" class="box2"/>
+  <text x="680" y="237" class="text-sm">Detect Windows EFI</text>
+  <text x="680" y="252" class="text-sm">Find free space &gt;=10G</text>
+  <line x1="680" y1="262" x2="680" y2="310" class="line"/>
+  <rect x="580" y="310" width="200" height="36" class="box2"/>
+  <text x="680" y="333" class="text-sm">Copy Windows bootloader</text>
+  <line x1="580" y1="328" x2="400" y2="328" class="line"/>
+
+  <!-- Full Wipe branch -->
+  <line x1="320" y1="240" x2="220" y2="240" class="line"/>
+  <rect x="20" y="218" width="200" height="44" class="box2"/>
+  <text x="120" y="237" class="text-sm">Full disk GPT</text>
+  <text x="120" y="252" class="text-sm">Erase everything</text>
+  <line x1="120" y1="262" x2="120" y2="310" class="line"/>
+  <rect x="20" y="310" width="200" height="36" class="box2"/>
+  <text x="120" y="333" class="text-sm">EFI + Root partitions</text>
+  <line x1="220" y1="328" x2="400" y2="328" class="line"/>
+
+  <!-- User input -->
+  <line x1="400" y1="328" x2="400" y2="360" class="line"/>
+  <rect x="250" y="360" width="300" height="36" class="box"/>
+  <text x="400" y="383" class="text" font-weight="bold">Step 4: User Input</text>
+  <line x1="400" y1="396" x2="400" y2="420" class="line"/>
+
+  <!-- Encryption -->
+  <rect x="250" y="420" width="300" height="36" class="box"/>
+  <text x="400" y="443" class="text" font-weight="bold">Step 5: LUKS Encryption?</text>
+  <line x1="400" y1="456" x2="400" y2="480" class="line"/>
+
+  <!-- Confirm -->
+  <rect x="250" y="480" width="300" height="36" class="box"/>
+  <text x="400" y="503" class="text" font-weight="bold">Step 6: Confirm &amp; Proceed</text>
+  <line x1="400" y1="516" x2="400" y2="540" class="line"/>
+
+  <!-- Partition -->
+  <rect x="200" y="540" width="400" height="44" class="box2"/>
+  <text x="400" y="559" class="text" font-weight="bold">Step 7: Create Partitions</text>
+  <text x="400" y="574" class="text-sm">EFI (2G) + Btrfs root (free space or full disk)</text>
+  <line x1="400" y1="584" x2="400" y2="610" class="line"/>
+
+  <!-- Encrypt + mkfs -->
+  <rect x="200" y="610" width="400" height="60" class="box2"/>
+  <text x="400" y="629" class="text" font-weight="bold">Step 8: Encrypt + Filesystems</text>
+  <text x="400" y="645" class="text-sm">LUKS2 (opt) → Btrfs → subvols (@ @home...</text>
+  <text x="400" y="660" class="text-sm">Mount EFI at /boot, copy Windows bootloader</text>
+  <line x1="400" y1="670" x2="400" y2="695" class="line"/>
+
+  <!-- pacstrap -->
+  <rect x="200" y="695" width="400" height="44" class="box"/>
+  <text x="400" y="714" class="text" font-weight="bold">Step 9: pacstrap</text>
+  <text x="400" y="729" class="text-sm">Offline repo → /mnt → genfstab</text>
+  <line x1="400" y1="739" x2="400" y2="765" class="line"/>
+
+  <!-- Chroot -->
+  <rect x="200" y="765" width="400" height="44" class="box"/>
+  <text x="400" y="784" class="text" font-weight="bold">Step 10: Chroot Setup</text>
+  <text x="400" y="799" class="text-sm">Time, locale, user, sudo, mkinitcpio</text>
+  <line x1="400" y1="809" x2="400" y2="835" class="line"/>
+
+  <!-- Limine -->
+  <rect x="200" y="835" width="400" height="60" class="box2"/>
+  <text x="400" y="854" class="text" font-weight="bold">Bootloader: Limine (UEFI)</text>
+  <text x="400" y="870" class="text-sm">efibootmgr entry + limine.conf</text>
+  <text x="400" y="885" class="text-sm">+ chainload Windows (if DualBoot)</text>
+  <line x1="400" y1="895" x2="400" y2="920" class="line"/>
+
+  <!-- Services -->
+  <rect x="250" y="920" width="300" height="36" class="box2"/>
+  <text x="400" y="943" class="text-sm">systemctl enable NetworkManager</text>
+  <line x1="400" y1="956" x2="400" y2="980" class="line"/>
+
+  <!-- Cleanup -->
+  <rect x="250" y="980" width="300" height="36" class="box"/>
+  <text x="400" y="1003" class="text" font-weight="bold">Step 11: Cleanup &amp; Reboot</text>
+
+  <!-- Legend -->
+  <rect x="30" y="1060" width="12" height="12" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
+  <text x="50" y="1071" class="text-sm">User interaction / decision</text>
+  <rect x="30" y="1082" width="12" height="12" fill="#1a1a2e" stroke="#0f3460" stroke-width="2"/>
+  <text x="50" y="1093" class="text-sm">Automated process</text>
+</svg>
