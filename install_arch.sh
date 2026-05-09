@@ -242,18 +242,35 @@ ok "EFI: $EFI_DEV   Root: $ROOT_DEV"
 # STEP 8: ENCRYPTION + FILESYSTEMS
 # ==============================
 LUKS_UUID=""
+
+# Remove old filesystem/LUKS signatures
+wipefs -a "$ROOT_DEV"
+
 if $ENCRYPT; then
   info "Setting up LUKS on $ROOT_DEV..."
-  printf "%s" "$PASSWORD" | cryptsetup luksFormat --type luks2 --batch-mode --force-password "$ROOT_DEV" -
+
+  printf "%s" "$PASSWORD" | cryptsetup luksFormat \
+    --type luks2 \
+    --batch-mode \
+    --force-password \
+    "$ROOT_DEV" -
+
   printf "%s" "$PASSWORD" | cryptsetup open "$ROOT_DEV" root
+
   ROOT_MAPPER="/dev/mapper/root"
   LUKS_UUID=$(cryptsetup luksUUID "$ROOT_DEV")
+
+  # Clear any signatures inside mapper too
+  wipefs -a "$ROOT_MAPPER"
 else
+  # Remove stale LUKS metadata if present
+  cryptsetup luksErase "$ROOT_DEV" 2>/dev/null || true
+
   ROOT_MAPPER="$ROOT_DEV"
 fi
 
 info "Creating Btrfs filesystem on $ROOT_MAPPER..."
-mkfs.btrfs "$ROOT_MAPPER"
+mkfs.btrfs -f "$ROOT_MAPPER"
 
 mount "$ROOT_MAPPER" /mnt
 for sub in @ @home @snapshots @log; do
@@ -330,7 +347,11 @@ PACOFF
   info "Using offline repo at $OFFLINE_REPO"
   PACMAN_CONF="$OFFLINE_PACMAN_CONF"
 fi
-
+if [[ -z "$OFFLINE_PACMAN_CONF" ]]; then
+  info "Checking internet connectivity..."
+  ping -c 1 archlinux.org >/dev/null 2>&1 \
+    || abort "No internet connection and no offline repo available."
+fi
 if pacstrap -C "$PACMAN_CONF" /mnt "${PACKAGES[@]}"; then
   genfstab -U /mnt >> /mnt/etc/fstab
   ok "Base system installed."
@@ -410,6 +431,9 @@ LocalFileSigLevel = Optional
 Include = /etc/pacman.d/mirrorlist
 
 [extra]
+Include = /etc/pacman.d/mirrorlist
+
+[multilib]
 Include = /etc/pacman.d/mirrorlist
 PACCONF
 
