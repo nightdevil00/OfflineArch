@@ -319,7 +319,7 @@ PACMAN_CONF="/etc/pacman.conf"
 PACKAGES=(
   base base-devel linux linux-firmware
   sudo btrfs-progs git nano
-  dhcpcd networkmanager limine efibootmgr binutils
+  dhcpcd networkmanager iwd limine efibootmgr binutils
   amd-ucode intel-ucode
   cryptsetup pipewire pipewire-alsa pipewire-pulse wireplumber
   sof-firmware plymouth
@@ -493,7 +493,29 @@ if [[ -d "/boot/EFI/Microsoft" ]]; then
 WEOF
 fi
 
-systemctl enable NetworkManager
+# Network stack: iwd + systemd-resolved + systemd-networkd
+systemctl disable --now NetworkManager.service 2>/dev/null || true
+systemctl enable --now iwd.service
+systemctl enable --now systemd-resolved.service
+systemctl enable --now systemd-networkd
+
+# systemd-networkd DHCP config for wlan0
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/25-wlan0.network << 'NETEOF'
+[Match]
+Name=wlan0
+
+[Network]
+DHCP=ipv4
+NETEOF
+
+# iwd DNS config
+mkdir -p /root/.config/iwd
+cat > /root/.config/iwd/main.conf << 'IWDOF'
+[Network]
+EnableNetworkConfiguration=true
+NameResolvingService=systemd
+IWDOF
 CHROOT
 
 # Fill placeholders
