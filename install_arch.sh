@@ -499,11 +499,19 @@ systemctl enable --now iwd.service
 systemctl enable --now systemd-resolved.service
 systemctl enable --now systemd-networkd
 
-# systemd-networkd DHCP config for wlan0
+# systemd-networkd DHCP config
 mkdir -p /etc/systemd/network
 cat > /etc/systemd/network/25-wlan0.network << 'NETEOF'
 [Match]
 Name=wlan0
+
+[Network]
+DHCP=ipv4
+NETEOF
+
+cat > /etc/systemd/network/25-wired.network << 'NETEOF'
+[Match]
+Name=en*
 
 [Network]
 DHCP=ipv4
